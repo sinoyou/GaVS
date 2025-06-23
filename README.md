@@ -9,7 +9,7 @@
 > [GaVS: 3D-Grounded Video Stabilization via Temporally-Consistent Local Reconstruction and Rendering](https://drive.google.com/file/d/1EODPfxaPR-fBLhlAVOdTHz7MTe9XBTJk/view?usp=sharing) (SIGGRAPH 2025 Conference Paper)  
 > Zinuo You,  Stamatios Georgoulis,  Anpei Chen,  Siyu Tang,  Dengxin Dai
 
-[![arXiv](https://img.shields.io/badge/arXiv-paper-blue?logo=arxiv&color=%23B31B1B)](https://drive.google.com/file/d/1EODPfxaPR-fBLhlAVOdTHz7MTe9XBTJk/view?usp=drive_link)[![ProjectPage](https://img.shields.io/badge/Project_Page-GaVS-blue)](https://sinoyou.github.io/gavs/)[![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Dataset-yellow)](https://huggingface.co/datasets/sinoyou/gavs-data/tree/main/dataset) [![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Full Results-yellow)](https://huggingface.co/datasets/sinoyou/gavs-data/tree/main/result_and_comparison) 
+[![arXiv](https://img.shields.io/badge/arXiv-paper-blue?logo=arxiv&color=%23B31B1B)](https://drive.google.com/file/d/1EODPfxaPR-fBLhlAVOdTHz7MTe9XBTJk/view?usp=drive_link)[![ProjectPage](https://img.shields.io/badge/Project_Page-GaVS-blue)](https://sinoyou.github.io/gavs/)[![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Dataset-yellow)](https://huggingface.co/datasets/sinoyou/gavs-data/tree/main/dataset)
 
 
 
