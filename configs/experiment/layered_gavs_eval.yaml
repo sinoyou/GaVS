@@ -1,0 +1,13 @@
+# @package _global_
+defaults:
+  - layered_gavs_overfit
+  - _self_
+
+config:
+  exp_name: eval
+  eval_dir: visualization
+
+dataset:
+  pad_border_aug: 96
+  height: 480
+  width: 864

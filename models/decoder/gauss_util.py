@@ -162,6 +162,7 @@ def render_predicted(cfg,
         rendered_depth, rendered_alpha = outputs[2:4]
         output["depth"] = rendered_depth
         output["opacity"] = opacity
+        output["alpha"] = rendered_alpha
     if len(outputs) >= 5:
         n_touched = outputs[4]
 

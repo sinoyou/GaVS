@@ -1,26 +1,24 @@
+import os
 import torch
 import logging
 import time
 import torch.nn as nn
+import numpy as np
+import matplotlib.pyplot as plt
 
 from pathlib import Path
 from einops import rearrange
 
 from models.encoder.layers import BackprojectDepth
-from models.decoder.gauss_util import focal2fov, getProjectionMatrix, K_to_NDC_pp, render_predicted
+from models.decoder.gauss_util import focal2fov, getProjectionMatrix, render_predicted
 from misc.util import add_source_frame_id
-from misc.depth import estimate_depth_scale, estimate_depth_scale_ransac
-
-def default_param_group(model):
-    return [{'params': model.parameters()}]
-
+from misc.depth import estimate_depth_scale_ransac
 
 def to_device(inputs, device):
     for key, ipt in inputs.items():
         if isinstance(ipt, torch.Tensor):
             inputs[key] = ipt.to(device)
     return inputs
-
 
 class GaussianPredictor(nn.Module):
     def __init__(self, cfg):
@@ -123,7 +121,7 @@ class GaussianPredictor(nn.Module):
             zeros = torch.zeros(B, 1, H * W, device=depth.device)
             offset = torch.cat([offset, zeros], 1)
             xyz = xyz + offset # [B, 4, W*H]
-        inputs[("inv_K_src", scale)] = inv_K
+        # inputs[("inv_K_src", scale)] = inv_K
         outputs["gauss_means"] = xyz
 
     @torch.no_grad()
@@ -161,21 +159,23 @@ class GaussianPredictor(nn.Module):
             depth = depth_padded[:, :, 
                                  self.cfg.dataset.pad_border_aug:depth_padded.shape[2]-self.cfg.dataset.pad_border_aug,
                                  self.cfg.dataset.pad_border_aug:depth_padded.shape[3]-self.cfg.dataset.pad_border_aug]
-            sparse_depth = inputs[("depth_sparse", 0)]
+            # sparse_depth = inputs[("depth_sparse", 0)]
             
             scales = []
             for k in range(B):
                 depth_k = depth[[k * self.cfg.model.gaussians_per_pixel], ...]
-                sparse_depth_k = sparse_depth[k]
+                # sparse_depth_k = sparse_depth[k]
                 if ("scale_colmap", 0) in inputs.keys():
                     scale = inputs[("scale_colmap", 0)][k]
                 else:
+                    sparse_depth_k = inputs[("depth_sparse", 0)][k]
                     if self.is_train():
-                        scale = estimate_depth_scale(depth_k, sparse_depth_k)
+                        scale = estimate_depth_scale_ransac(depth_k, sparse_depth_k)
                     else:
                         scale = estimate_depth_scale_ransac(depth_k, sparse_depth_k)
                 scales.append(scale)
             scale = torch.tensor(scales, device=depth.device).unsqueeze(dim=1)
+            # print(scales)
             outputs[("depth_scale", 0)] = scale
 
             for f_i in self.target_frame_ids(inputs):
@@ -208,13 +208,7 @@ class GaussianPredictor(nn.Module):
                         continue
                     T = outputs[('cam_T_cam', 0, frame_id)]
                 
-                if cfg.train.use_gt_poses:
-                    pos = pos_input_frame
-                else:
-                    P = rearrange(T[:, :3, :][:, None, ...].repeat(1, self.cfg.model.gaussians_per_pixel, 1, 1),
-                                  'b n ... -> (b n) ...')
-                    pos = torch.matmul(P, pos_input_frame)
-                
+                pos = pos_input_frame
                 point_clouds = {
                     "xyz": rearrange(pos[:, :3, :], "(b n) c l -> b (n l) c", n=self.cfg.model.gaussians_per_pixel),
                     "opacity": rearrange(outputs["gauss_opacity"], "(b n) c h w -> b (n h w) c", n=self.cfg.model.gaussians_per_pixel),
@@ -225,22 +219,20 @@ class GaussianPredictor(nn.Module):
                 if cfg.model.max_sh_degree > 0:
                     point_clouds["features_rest"] = rearrange(outputs["gauss_features_rest"], "(b n) (sh c) h w -> b (n h w) sh c", c=3, n=self.cfg.model.gaussians_per_pixel)
 
+                if cfg.train.drop_extra_gaussian_features:
+                    point_clouds.pop("features_rest", None)
+
                 rgbs = []
                 depths = []
+                alphas = []
 
                 for b in range(B):
                     # get camera projection matrix
-                    if cfg.dataset.name in ["kitti", "nyuv2", "waymo"]:
-                        K_tgt = inputs[("K_tgt", 0)]
-                    else:
-                        K_tgt = inputs[("K_tgt", frame_id)]
+                    K_tgt = inputs[("K_tgt", frame_id)]
                     focals_pixels = torch.diag(K_tgt[b])[:2]
                     fovY = focal2fov(focals_pixels[1].item(), H)
                     fovX = focal2fov(focals_pixels[0].item(), W)
-                    if cfg.dataset.name in ["co3d", "re10k", "mixed"]:
-                        px_NDC, py_NDC = 0, 0
-                    else:
-                        px_NDC, py_NDC = K_to_NDC_pp(Kx=K_tgt[b][0, 2], Ky=K_tgt[b][1, 2], H=H, W=W)
+                    px_NDC, py_NDC = 0, 0
                     proj_mtrx = getProjectionMatrix(cfg.dataset.znear, cfg.dataset.zfar, fovX, fovY, pX=px_NDC, pY=py_NDC).to(device)
                     world_view_transform = T[b].transpose(0, 1).float()
                     camera_center = (-world_view_transform[3, :3] @ world_view_transform[:3, :3].transpose(0, 1)).float()
@@ -264,12 +256,14 @@ class GaussianPredictor(nn.Module):
                         (fovX, fovY),
                         (H, W),
                         bg_color,
-                        cfg.model.max_sh_degree
+                        cfg.model.max_sh_degree if "features_rest" in pc else 0
                     )
                     rgb = out["render"]
                     rgbs.append(rgb)
                     if "depth" in out:
                         depths.append(out["depth"])
+                    if "opacity" in out:
+                        alphas.append(out["alpha"])
                 
                 rbgs = torch.stack(rgbs, dim=0)
                 outputs[("color_gauss", frame_id, scale)] = rbgs
@@ -277,6 +271,10 @@ class GaussianPredictor(nn.Module):
                 if "depth" in out:
                     depths = torch.stack(depths, dim=0)
                     outputs[("depth_gauss", frame_id, scale)] = depths
+                
+                if "alpha" in out:
+                    alphas = torch.stack(alphas, dim=0)
+                    outputs[("alpha_gauss", frame_id, scale)] = alphas
     
     def checkpoint_dir(self):
         return Path("checkpoints")

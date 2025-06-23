@@ -61,11 +61,13 @@ def load_sparse_pcl_colmap(dir_recon):
         "xyz": xyz
     }
 
+def pose_to_4x4(w2c):
+    if w2c.shape[0] == 3:
+        w2c = np.concatenate((w2c.astype(np.float32),
+                             np.array([[0, 0, 0, 1]], dtype=np.float32)), axis=0)
+    return w2c
 
-def get_sparse_depth(T_w2c, img_size, crop_margin, sparse_pcl, frame_idx):
-    """
-    img_size: (W, H) - original size of the image before resizing as used by COLMAP
-    """
+def get_sparse_depth(pose_data, img_size, sparse_pcl, frame_idx):
     # image_id-1 == frame_idx
     xys_all = sparse_pcl["xys"]
     p3D_ids_all = sparse_pcl["p3D_ids"]
@@ -73,6 +75,8 @@ def get_sparse_depth(T_w2c, img_size, crop_margin, sparse_pcl, frame_idx):
 
     xys = xys_all[frame_idx]
     p3D_ids = p3D_ids_all[frame_idx]
+
+    W, H = img_size
 
     visible_points = p3D_ids != -1
     xys = xys[visible_points, :]
@@ -85,9 +89,18 @@ def get_sparse_depth(T_w2c, img_size, crop_margin, sparse_pcl, frame_idx):
     # index to -1 because image_ids are 1-indexed
     # K = _process_projs(pose_data["intrinsics"][image_id-1], H, W)
     # load the extrinsic matrixself.num_scales
+    T_w2c = pose_to_4x4(pose_data["poses"][frame_idx])
     # P = K @ T_w2c
     xyz_pix = np.einsum("ji,ni->nj", T_w2c, xyz_image_h)[:, :3]
     depth = xyz_pix[:, 2:]
-    xys_scaled = ((xys - crop_margin) / img_size - 0.5) * 2
+    img_dim = np.array([[W, H]])
+    xys_scaled = (xys / img_dim - 0.5) * 2
     xyd = np.concatenate([xys_scaled, depth], axis=1)
-    return torch.from_numpy(xyd).to(torch.float32)
+    
+    # mask: filter out sparse points out of the fov (due to the center cropping)
+    mask_x = (xyd[:, 0] > -1) & (xyd[:, 0] < 1)
+    mask_y = (xyd[:, 1] > -1) & (xyd[:, 1] < 1)
+    xyd_masked = xyd[mask_x & mask_y]
+    # print(f"Filtered out {len(xyd) - len(xyd_masked)} points out of {len(xyd)}, x-in = {mask_x.sum()}, y-in = {mask_y.sum()}")
+
+    return torch.from_numpy(xyd_masked).to(torch.float32)

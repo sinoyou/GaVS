@@ -1,0 +1,40 @@
+# @package _global_
+config:
+  exp_name: overfit
+
+defaults:
+  - override /dataset: gavs
+  - override /model: gaussian
+  - override /loss: [regularization, reconstruction]
+
+data_loader:
+  batch_size: 5
+  num_workers: 5
+
+train:
+  load_weights_folder: ./gavs-data/re10k_v2_checkpoints
+  scale_pose_by_depth: true
+  drop_extra_gaussian_features: true
+  handle_dynamic_by_mask: false
+  handle_dynamic_by_flow: true
+  window_sampler: true
+
+optimiser:
+  learning_rate: 4e-4
+  num_epochs: 3
+  scheduler_max_epochs: 3
+
+model:
+  name: unidepth
+  gauss_novel_frames: [1, 2, 3, 4]
+  renderer_w_pose: true
+  scale_with_depth: false
+  opacity_scale: 1.0
+  depth_scale: 0.1
+  xyz_scale: 0.2
+  max_depth: 20
+  depth_cond: true
+
+run:
+  log_frequency: 50
+  save_frequency: 100000

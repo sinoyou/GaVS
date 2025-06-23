@@ -1,102 +1,175 @@
-[![arXiv](https://img.shields.io/badge/arXiv-2406.04343-blue?logo=arxiv&color=%23B31B1B)](https://arxiv.org/abs/2406.04343)
-[![ProjectPage](https://img.shields.io/badge/Project_Page-Flash3D-blue)](https://www.robots.ox.ac.uk/~vgg/research/flash3d/)
-[![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Demo-yellow)](https://huggingface.co/spaces/szymanowiczs/flash3d) 
 
-
-# Flash3D: Feed-Forward Generalisable 3D Scene Reconstruction from a Single Image
-
+# GaVS: 3D-Grounded Video Stabilization via Temporally-Consistent Local Reconstruction and Rendering (SIGGRAPH 2025)
 
 <p align="center">
-  <img src="assets/teaser_video.gif" alt="animated" />
+  <img src="assets/teaser.png" />
 </p>
 
-> [Flash3D: Feed-Forward Generalisable 3D Scene Reconstruction from a Single Image](https://www.robots.ox.ac.uk/~vgg/research/flash3d/)  
-> Stanislaw Szymanowicz, Eldar Insafutdinov, Chuanxia Zheng, Dylan Campbell, João F. Henriques, Christian Rupprecht, Andrea Vedaldi  
-> *[arXiv 2406.04343](https://arxiv.org/pdf/2406.04343.pdf)*  
 
-# News
-- [x] `19.07.2024`: Training code and data release
+> [GaVS: 3D-Grounded Video Stabilization via Temporally-Consistent Local Reconstruction and Rendering](https://drive.google.com/file/d/1EODPfxaPR-fBLhlAVOdTHz7MTe9XBTJk/view?usp=sharing) (SIGGRAPH 2025 Conference Paper)  
+> Zinuo You,  Stamatios Georgoulis,  Anpei Chen,  Siyu Tang,  Dengxin Dai
+
+[![arXiv](https://img.shields.io/badge/arXiv-paper-blue?logo=arxiv&color=%23B31B1B)](https://drive.google.com/file/d/1EODPfxaPR-fBLhlAVOdTHz7MTe9XBTJk/view?usp=drive_link)[![ProjectPage](https://img.shields.io/badge/Project_Page-GaVS-blue)](https://sinoyou.github.io/gavs/)[![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Dataset-yellow)](https://huggingface.co/datasets/sinoyou/gavs-data/tree/main/dataset) [![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Full Results-yellow)](https://huggingface.co/datasets/sinoyou/gavs-data/tree/main/result_and_comparison) 
+
+
 
 # Setup
 
+## Clone
+
+```
+git clone https://github.com/sinoyou/gavs.git
+```
+
 ## Create a python environment
 
-Flash3D has been trained and tested with the followings software versions:
+GaVS has been trained and tested with the followings software versions: **Python 3.10, CUDA 12.6**
 
-- Python 3.10
-- Pytorch 2.2.2
-- CUDA 11.8
-- GCC 11.2 (or more recent)
-
-Begin by installing CUDA 11.8 and adding the path containing the `nvcc` compiler to the `PATH` environmental variable.
-Then the python environment can be created either via conda:
+create and activate conda environment 
 
 ```sh
-conda create -y python=3.10 -n flash3d
-conda activate flash3d
+conda create -n gavs python=3.10
+conda activate gavs
 ```
 
-or using Python's venv module (assuming you already have access to Python 3.10 on your system):
+or place local victual environment
 
 ```sh
-python3.10 -m venv .venv
-. .venv/bin/activate
+conda create -p ./venv python=3.10
+conda activate ./venv
 ```
 
-Finally, install the required packages as follows:
+Finally, install the required packages in the following order, 
 
 ```sh
-pip install -r requirements-torch.txt --extra-index-url https://download.pytorch.org/whl/cu118
+pip install -r requirements-torch.txt --extra-index-url https://download.pytorch.org/whl/cu126
+pip install ./thirdparty/diff-gaussian-rasterization-w-pose
 pip install -r requirements.txt
 ```
 
-## Download training data
+## GaVS Data
 
-### RealEstate10K dataset
+In the project root directory, please download and unzip the **dataset, pre-trained checkpoints and results** from HuggingFace repo. 
 
-For downloading the RealEstate10K dataset we base our instructions on the [Behind The Scenes](https://github.com/Brummi/BehindTheScenes/tree/main?tab=readme-ov-file#-datasets) scripts.
-First you need to download the video sequence metadata including camera poses from https://google.github.io/realestate10k/download.html and unpack it into `data/` such that the folder layout is as follows:
-
-```
-data/RealEstate10K/train
-data/RealEstate10K/test
+```python
+# download and unzip
+python datasets/download_gavs_data.py
 ```
 
-Finally download the training and test sets of the dataset with the following commands:
+### Google DeepFused Datasets with Extra Annotations
 
-```sh
-python datasets/download_realestate10k.py -d data/RealEstate10K -o data/RealEstate10K -m train
-python datasets/download_realestate10k.py -d data/RealEstate10K -o data/RealEstate10K -m test
+Our method is mainly evaluated on the selected scenes from [Google Deep Online Fused Video Stabilization](https://zhmeishi.github.io/dvs/), including  15 challenging scenes categorized into **dynamic**, **mild** and **intense**. The selection process considers our method's nature of 3D modeling and the balance between different categories. 
+
+The original dataset only contains raw unstable videos with gyro information. We first extract video frames and compensate rolling shutter by 2D homography from gyro history. Then we enhance video frames with following modules:
+
+- [GLOMAP](https://github.com/sczhou/ProPainter): compute 3D camera poses and sparse point clouds from the static regions. 
+- [ProPainter](https://github.com/sczhou/ProPainter): video completion module to extrapolate original frame with optical flow. 
+- [Grounded SAM 2](https://github.com/IDEA-Research/Grounded-SAM-2): extract dynamic masks with text prompts. 
+
+Additionally, we compute monocular depth maps and optical flows on-the-fly with [UniDepth](https://github.com/lpiccinelli-eth/UniDepth) and [RAFT](https://github.com/princeton-vl/RAFT). 
+
+### Directory Layout
+
+With correct cloning and data extraction, the project directory is expected to be as follows:
+
+```python
+./
+|-- gavs-data 
+|   |-- re10k_v2_checkpoints/ # pretrained Flash3D model
+|   |-- dataset
+|   |   |-- dynamic_dance/    # preprocessed data of 'dynamic dance'
+|   |   |-- dynamic_dance.zip # downloaded zip file 
+|   |   |-- ...
+|   |-- result_and_comparison # reference results from different methods
+|-- configs
+|   |-- dataset/              # dataset configs
+|   |-- experiment/           # finetuning and evaluation configs
+|   |-- ...
+|-- train.py                  # entry point of finetuning
+|-- evaluation.py             # entry point of evaluation
+|-- models/
+|-- README.md
+|-- ...
 ```
 
-This step will take several days to complete. Finally, download additional data for the RealEstate10K dataset.
-In particular, we provide pre-processed COLMAP cache containing sparse point clouds which are used to estimate the scaling factor for depth predictions.
-The last two commands filter the training and testing set from any missing video sequences.
 
-```sh
-sh datasets/dowload_realestate10k_colmap.sh
-python -m datasets.preprocess_realestate10k -d data/RealEstate10K -s train
-python -m datasets.preprocess_realestate10k -d data/RealEstate10K -s test
-```
 
-## Download and evaluate the pretrained model
+# Finetune and Evaluation
 
-We provide model weights that could be downloaded and evaluated on RealEstate10K test set:
+You can start the finetuning with the following command (e.g. dynamic_dance scene). The evaluation will automatically start afterwards,  
 
-```sh
-python -m misc.download_pretrained_models -o exp/re10k_v2
-sh evaluate.sh exp/re10k_v2
-```
-
-## Training
-
-In order to train the model on RealEstate10K dataset execute this command:
-```sh
+```bash
 python train.py \
-  +experiment=layered_re10k \
-  model.depth.version=v1 \
-  train.logging=false 
+       hydra.run.dir=./exp/dynamic_dance/ \
+       +experiment=layered_gavs_overfit \
+       dataset.data_path=./gavs-data/dataset/dynamic_dance
 ```
 
+You can also start the evaluation only (e.g. with different stability) with the following command, 
+
+```bash
+python evaluate.py \
+       train.mode='eval' \
+       hydra.run.dir=./exp/dynamic_dance \
+       +experiment=layered_gavs_eval \
+       dataset.data_path=./gavs-data/dataset/dynamic_dance \
+       config.eval_dir='customized_eval'
+```
+
+## Ablation Configuration
+Ablation on inpainting module, 
+
+```bash
+python train.py \
+       hydra.run.dir=./exp/dynamic_dance/ \
+       +experiment=layered_gavs_overfit \
+       dataset.data_path=./gavs-data/dataset/dynamic_dance \
+       dataset.use_inpainted_images=False
+```
+
+Ablation on dynamic compensation, 
+
+```bash
+python train.py \
+       hydra.run.dir=./exp/dynamic_dance/ \
+       +experiment=layered_gavs_overfit \
+       dataset.data_path=./gavs-data/dataset/dynamic_dance \
+       train.handle_dynamic_by_flow=False
+```
+
+Ablation on window regularization, 
+
+```bash
+python train.py \
+       hydra.run.dir=./exp/dynamic_dance/ \
+       +experiment=layered_gavs_overfit \
+       dataset.data_path=./gavs-data/dataset/dynamic_dance \
+       loss.window.weight=0
+```
+
+Ablation on video stability, 
+
+```bash
+python train.py \
+       hydra.run.dir=./exp/dynamic_dance/ \
+       +experiment=layered_gavs_overfit \
+       dataset.data_path=./gavs-data/dataset/dynamic_dance \
+       dataset.stability=8
+```
+
+# Acknowledgement
+
+This repo is built on the [Flash3D](https://github.com/eldar/flash3d). We thank the authors of all the open source tools: [GLOMAP](https://github.com/sczhou/ProPainter), [ProPainter](https://github.com/sczhou/ProPainter), [Grounded SAM 2](https://github.com/IDEA-Research/Grounded-SAM-2), [UniDepth](https://github.com/lpiccinelli-eth/UniDepth) and [RAFT](https://github.com/princeton-vl/RAFT). We thank the authors of following projects for providing evaluation scenes: [Google Deep Online Fused Video Stabilization](https://zhmeishi.github.io/dvs/) and [LocalRF](https://github.com/facebookresearch/localrf). 
 
 
+
+# BibTeX
+
+```
+@article{you2025gavs,
+    title={GaVS: 3D-Grounded Video Stabilization via Temporally-Consistent Local Reconstruction and Rendering},
+    author={You, Zinuo and Georgoulis, Stamatios and Chen, Anpei and Tang, Siyu and Dai, Dengxin},
+    journal={arXiv preprint arXiv:2506.xxxxx},
+    year={2025}
+    }
+```

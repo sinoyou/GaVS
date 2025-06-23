@@ -1,0 +1,19 @@
+name: gavs
+data_path: ./gavs-data/dataset/dynamic_dance
+
+height: 320
+width: 576
+stability: 4
+stability_window: 31
+
+znear: 0.01
+zfar: 100.0
+
+pad_border_aug: 64
+subset: -1  # use subset frames for small set overfitting
+
+frame_sampling_method: random
+scale_pose_by_depth: true
+
+predefined_depth_scale: 
+use_inpainted_images: true

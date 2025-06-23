@@ -1,23 +1,32 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import types
 
 from einops import rearrange
 from models.encoder.resnet_encoder import ResnetEncoder
 from models.decoder.resnet_decoder import ResnetDecoder, ResnetDepthDecoder
+
+from models.encoder.unidepth_utils import infer as unidepth_grad_infer
 
 class UniDepthExtended(nn.Module):
     def __init__(self, cfg):
         super().__init__()
 
         self.cfg = cfg
+        unidepth_path = "lpiccinelli-eth/UniDepth"
         self.unidepth = torch.hub.load(
-            "lpiccinelli-eth/UniDepth", "UniDepth", version=cfg.model.depth.version, 
+            unidepth_path, "UniDepth", version=cfg.model.depth.version,
             backbone=cfg.model.depth.backbone, pretrained=True, trust_repo=True, 
-            force_reload=True
+            force_reload=False
         )
 
         self.parameters_to_train = []
+
+        # freeze unidepth weights
+        for param in self.unidepth.parameters():
+            param.requires_grad = False
+
         if cfg.model.backbone.name == "resnet":
             self.encoder = ResnetEncoder(
                 num_layers=cfg.model.backbone.num_layers,
@@ -50,14 +59,19 @@ class UniDepthExtended(nn.Module):
         return self.parameters_to_train
     
     def forward(self, inputs):
+        # print the mean values of self.unidepth.pixel_decoder.depth_layer.out2.parameters()
+        unidepth_means = [param.mean().item() for param in self.unidepth.pixel_decoder.depth_layer.out2.parameters()]
+        # print("unidepth_check: ", unidepth_means)
+
         # prediting the depth for the first layer with pre-trained depth
         if ('unidepth', 0, 0) in inputs.keys() and inputs[('unidepth', 0, 0)] is not None:
             depth_outs = dict()
             depth_outs["depth"] = inputs[('unidepth', 0, 0)]
         else:
-            with torch.no_grad():
-                intrinsics = inputs[("K_src", 0)] if ("K_src", 0) in inputs.keys() else None
-                depth_outs = self.unidepth.infer(inputs["color_aug", 0, 0], intrinsics=intrinsics)
+            self.unidepth.infer = types.MethodType(unidepth_grad_infer, self.unidepth)
+            intrinsics = inputs[("K_src", 0)] if ("K_src", 0) in inputs.keys() else None
+            depth_outs = self.unidepth.infer(inputs["color_aug", 0, 0], intrinsics=intrinsics)            
+
         outputs_gauss = {}
 
         outputs_gauss[("K_src", 0)] = inputs[("K_src", 0)] if ("K_src", 0) in inputs.keys() else depth_outs["intrinsics"]
@@ -70,9 +84,12 @@ class UniDepthExtended(nn.Module):
             input = inputs["color_aug", 0, 0]
         encoded_features = self.encoder(input)
         # predict multiple gaussian depths
+        outputs_gauss[("unidepth")] = depth_outs["depth"]
+        # outputs_gauss[('unidepth-points')] = depth_outs["points"]
         if self.cfg.model.gaussians_per_pixel > 1:
             depth = self.models["depth"](encoded_features)
             depth[("depth", 0)] = rearrange(depth[("depth", 0)], "(b n) ... -> b n ...", n=self.cfg.model.gaussians_per_pixel - 1)
+            outputs_gauss[("depth_inc", 0)] = depth[("depth", 0)]
             depth[("depth", 0)] = torch.cumsum(torch.cat((depth_outs["depth"][:,None,...], depth[("depth", 0)]), dim=1), dim=1)
             outputs_gauss[("depth", 0)] = rearrange(depth[("depth", 0)], "b n c ... -> (b n) c ...", n = self.cfg.model.gaussians_per_pixel)
         else:

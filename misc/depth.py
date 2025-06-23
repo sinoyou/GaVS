@@ -4,28 +4,9 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import numpy as np
 
-from einops import rearrange
-
-
-def estimate_depth_scale_kitti(depth, depth_gt):
-    """
-    depth: [1, 1, H, W]
-    depth_gt: [N, 2]
-    """
-    eps = 1e-7
-    depth = rearrange(depth, "1 1 h w -> (h w)")
-    depth_gt = rearrange(depth_gt, "1 1 h w -> (h w)")
-    valid_depth = depth_gt != 0
-    depth = depth[valid_depth]
-    depth_gt = depth_gt[valid_depth]
-
-    scale = (depth.log() - depth_gt.log()).mean().exp()
-    return scale
-
-
 def estimate_depth_scale(depth, sparse_depth):
     """
-    depth: [1, 1, H, W]
+    depth: [1, H, W]
     sparse_depth: [N, 3]
     """
     eps = 1e-7
@@ -36,7 +17,8 @@ def estimate_depth_scale(depth, sparse_depth):
     xy = sparse_depth[:, :2]
     z = sparse_depth[:, 2]
     xy = xy.unsqueeze(0).unsqueeze(0)
-    depth_pred = F.grid_sample(depth, xy.to(depth.device), align_corners=False)
+    # grid sample: (1, 1, H, W), (1, 1, N, 2) -> (1, 1, 1, N)
+    depth_pred = F.grid_sample(depth.unsqueeze(0), xy.to(depth.device), align_corners=False)
     depth_pred = depth_pred.squeeze()
     # z = torch.max(z, torch.tensor(eps, dtype=z.dtype, device=z.device))
     good_depth = torch.logical_and(z > eps, depth_pred > eps)
@@ -46,7 +28,7 @@ def estimate_depth_scale(depth, sparse_depth):
     if z.shape[0] < 10:
         return torch.tensor(1.0, device=device, dtype=torch.float32)
 
-    scale = (depth_pred.log() - z.log()).mean().exp()
+    scale = (depth_pred.log() - z.log()).median().exp()
     return scale
 
 
@@ -113,10 +95,10 @@ def normalize_depth_for_display(depth, pc=95, crop_percent=0, normalizer=None, c
 
     depth_f = depth.flatten()
     depth_f = depth_f[depth_f != 0]
-    disp_f = 1.0 / (depth_f + 1e-6)
+    disp_f = 1.0 / (depth_f + 1.0)
     percentile = np.percentile(disp_f, pc)
 
-    disp = 1.0 / (depth + 1e-6)
+    disp = 1.0 / (depth + 1.0)
     if normalizer is not None:
         disp /= normalizer
     else:
