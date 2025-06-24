@@ -1,0 +1,18 @@
+gauss_scale:
+  weight: 0.05
+
+gauss_offset:
+  weight: 0.01
+
+window:
+  weight: 0.01
+  opacity_weight: 1.0
+  scaling_weight: 1.0
+  rotation_weight: 1.0
+  feature_dc_weight: 1.0
+
+depth_reg:
+  weight: 0.01
+  ratio: 0.2
+
+only_fg_regularization: True
