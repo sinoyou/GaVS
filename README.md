@@ -177,5 +177,5 @@ This repo is built on the [Flash3D](https://github.com/eldar/flash3d). We thank 
     author={You, Zinuo and Georgoulis, Stamatios and Chen, Anpei and Tang, Siyu and Dai, Dengxin},
     journal={arXiv preprint arXiv:2506.xxxxx},
     year={2025}
-    }
+}
 ```
