@@ -175,7 +175,7 @@ This repo is built on the [Flash3D](https://github.com/eldar/flash3d). We thank 
 @article{you2025gavs,
     title={GaVS: 3D-Grounded Video Stabilization via Temporally-Consistent Local Reconstruction and Rendering},
     author={You, Zinuo and Georgoulis, Stamatios and Chen, Anpei and Tang, Siyu and Dai, Dengxin},
-    journal={arXiv preprint arXiv:2506.xxxxx},
+    journal={arXiv preprint arXiv:2506.23957},
     year={2025}
 }
 ```
