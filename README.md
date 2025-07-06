@@ -34,7 +34,7 @@ conda create -n gavs python=3.10
 conda activate gavs
 ```
 
-or place local victual environment
+or place local virtual environment
 
 ```sh
 conda create -p ./venv python=3.10
